@@ -12,7 +12,7 @@ import pickle
 
 
 
-def os_analysis(id_acc, T_1, q):
+def os_analysis(id_acc, T_1, q, accs_data):
     
     # unit of measurement: N, mm, sec
 
@@ -79,17 +79,13 @@ def os_analysis(id_acc, T_1, q):
     Mnode = k*T_1**2/(4*np.pi**2)
     ops.mass(11, Mnode, 0, 0)
 
-    ## Modal analysis
+    # # Modal analysis
     # eigenvalues = ops.eigen('-fullGenLapack',1)
     # periods = [(2*np.pi)/np.sqrt(lam) for lam in eigenvalues]
     # for i, freq in enumerate(periods):
     #     print(f"Modo {i+1}: frequenza = {freq:.4f} sec")
 
 
-
-    # read acceleration data from pickle file
-    with open('acc_data.pkl', 'rb') as f:
-        accs_data = pickle.load(f)
     acc_data = np.array(accs_data["acc"][f'{id_acc}']) * g #converting acceleration to mm/s²
 
     # take position of accs_data["spectr"]["T"] equal to T_1
@@ -100,7 +96,7 @@ def os_analysis(id_acc, T_1, q):
 
     # Scale factor for acceleration
     a_g = (k * dy * q) / (Mnode * S_el * g)
-
+    # print(a_g)
 
     # Damping
     xi = 5/100
@@ -129,11 +125,8 @@ def os_analysis(id_acc, T_1, q):
 
 
 
-    top_node, basenodes = 11, [1]
-
     tCurrent = ops.getTime()
-    time = []
-    D = []
+    time, D = [], []
     ok, step = 0, 0
 
     while ok == 0 and tCurrent < TMaxAnalysis:
@@ -147,54 +140,69 @@ def os_analysis(id_acc, T_1, q):
             if ok == 0:
                 ops.test('EnergyIncr', 1e-8, 15, 0)
                 ops.algorithm('Newton')
+            else:
+                print(f"Analysis failed at step {step} with ok={ok}")
         
         ops.reactions()
 
         tCurrent = ops.getTime()
         time.append(tCurrent)
 
-        D.append(ops.nodeDisp(top_node,dof_analysis))
+        D.append(ops.nodeDisp(11, dof_analysis))
         step += 1
 
-    # Maximum displacement and index
+    # Maximum displacement
     d_max = max(D, key=abs)
-    id_max = D.index(d_max)
 
-    return acc_data[int(id_max/step_dt)] / g *a_g
+    return abs(d_max)
 
 
-def eval_spectrum(id_acc, q, **kwargs):
-    Ts = kwargs.get('Ts', np.arange(0.1, 4, 0.05))
-    return [os_analysis(id_acc, round(T, 2), q) for T in Ts]
+def eval_spectrum(id_acc, q, accs_data, **kwargs):
+    Ts = kwargs.get('Ts', np.arange(0.10, 4, 0.05))
+    return [os_analysis(id_acc, round(T, 2), q, accs_data)/26.160000098837305 for T in Ts]
 
 if __name__ == "__main__":
 
     id_acc = 1
-    q = 1
+    q = 1.25
 
     # S_d = os_analysis(id_acc, T_1, q)
     # print(f"Spectral displacement for id_acc={id_acc}, T_1={T_1}, q={q}: S_d = {S_d:.4f} g")
 
+    # read acceleration data from pickle file
+    with open('acc_data.pkl', 'rb') as f:
+        accs_data = pickle.load(f)
+
+    # S_ds = eval_spectrum(id_acc, q, accs_data)
+    Ts = np.arange(0.1, 2, 0.05)
+
+    S_ds = []
+    for id_acc in range(1, 6):
+        # print(id_acc)
+        S_ds.append(eval_spectrum(id_acc, q, accs_data, Ts=Ts))
 
 
-    S_ds = eval_spectrum(id_acc, q)
 
 
 
 
-
-    Ts = np.arange(0.1, 4, 0.05)
     fig = plt.figure(figsize=plt_set.fig_size)
     ax = fig.gca()
 
-    ax.plot(Ts, S_ds, label=f'id_acc={id_acc}, q={q}', c = "midnightblue")
-    ax.scatter(Ts, S_ds, color='red', s=10)
-    ax.set_xlabel('T [s]'), ax.set_ylabel(r'$S_d$ [g]')
+    for S_d in S_ds:
+        ax.plot(Ts, S_d, c="midnightblue", linewidth=0.5, alpha=0.4)
+    # Plot of the average
+    S_d_avg = np.mean(S_ds, axis=0)
+    ax.plot(Ts, S_d_avg, c="midnightblue", linewidth=1.5, label = "Avg spectr.")
+    # ax.plot(Ts,S_ds, label=f'id_acc={id_acc}, q={q}', c = "midnightblue")
+    # ax.scatter(Ts, S_ds, color='midnightblue', s=7)
+    ax.set_xlabel('T [s]'), ax.set_ylabel(r'$S_d/d_y$ [-]')
     ax.grid(alpha = 0.3)
-
+    ax.axhline(q, color = "dimgrey", linestyle='--', linewidth=1.5, label=rf'$\mu$ = {q}')
+    ax.legend()
     ax.set_xlim(0), ax.set_ylim(0)
-    ax.set_title(f'Spectr. acc={id_acc}, q={q}')
-    plt.tight_layout(), plt.savefig(f'./figs/spectral_displacement_id_acc_{id_acc}_q_{q}.png', dpi=150, bbox_inches='tight')
+    ax.set_title(f'Displ. spectra q={q}')
+    plt.tight_layout(), plt.savefig(f'./figs/spectral_displacement_q_{q}_2.png', dpi=150, bbox_inches='tight')
 
 
 
