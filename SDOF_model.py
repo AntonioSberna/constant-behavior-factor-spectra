@@ -91,11 +91,17 @@ ops.mass(11, Mnode, 0, 0)
 # read acceleration data from pickle file
 with open('acc_data.pkl', 'rb') as f:
     accs_data = pickle.load(f)
-acc_data = np.array(accs_data[f'{id_acc}']) * g #converting acceleration to mm/s²
+acc_data = np.array(accs_data["acc"][f'{id_acc}']) * g #converting acceleration to mm/s²
+
+# take position of accs_data["spectr"]["T"] equal to T_1
+T_index = accs_data["spectr"]["T"].index(T_1)
+
+S_el = accs_data["spectr"][f'{id_acc}'][T_index]  # spectral acceleration for T_1
+
 
 # Scale factor for acceleration
-a_g = (k * dy * q) / (Mnode * )
-print("A_g", a_g)
+a_g = (k * dy * q) / (Mnode * S_el * g)
+
 
 # Damping
 xi = 5/100
@@ -109,7 +115,6 @@ TMaxAnalysis = len(acc_data) * dt
 n_steps = int(TMaxAnalysis/DtAnalysis)+1
 dof_analysis = 1
 
-print(TMaxAnalysis)
 
 ops.test('EnergyIncr', 1e-8, 15, 0)
 ops.constraints('Transformation')
@@ -136,12 +141,10 @@ while ok == 0 and tCurrent < TMaxAnalysis:
     ok = ops.analyze(1, DtAnalysis)
 
     if ok != 0:
-        print("regular newton failed .. lets try an initail stiffness for this step")
         ops.test('NormDispIncr', 1e-4,  100, 0)
         ops.algorithm('ModifiedNewton', '-initial')
         ok = ops.analyze(1, DtAnalysis)
         if ok == 0:
-            print("that worked .. back to regular newton")
             ops.test('EnergyIncr', 1e-8, 15, 0)
             ops.algorithm('Newton')
     
@@ -170,7 +173,7 @@ ax.grid(alpha = 0.25)
 ax.set_xlabel("Displacement [mm]")
 ax.set_ylabel("Force [kN]")
 ax.axhline(0, color='grey', linewidth = 1, alpha=0.6), ax.axvline(0, color='grey', linewidth = 1, alpha=0.6)
-
+plt.savefig('./figs/displacement_force.png', dpi=150, bbox_inches='tight')
 
 
 
@@ -182,15 +185,16 @@ ax.grid(alpha = 0.25)
 ax.set_ylabel("Displacement [mm]")
 ax.set_xlabel("Time [s]")
 ax.axhline(0, color='grey', linewidth = 1, alpha=0.6), ax.axvline(0, color='grey', linewidth = 1, alpha=0.6)
+plt.savefig('./figs/displacement_time.png', dpi=150, bbox_inches='tight')
 
 fig = plt.figure()
 ax = fig.gca()
-ax.plot(time, acc_data, c = "midnightblue")
+ax.plot(np.linspace(0, TMaxAnalysis, len(acc_data)), acc_data, c = "midnightblue")
 ax.grid(alpha = 0.25)
 ax.set_ylabel("Acceleration [m/s²]")
 ax.set_xlabel("Time [s]")
 ax.axhline(0, color='grey', linewidth = 1, alpha=0.6), ax.axvline(0, color='grey', linewidth = 1, alpha=0.6)
+plt.savefig('./figs/acceleration_time.png', dpi=150, bbox_inches='tight')
 
 
-
-plt.show()
+# plt.show()
