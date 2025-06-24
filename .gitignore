@@ -7,7 +7,7 @@
 /Rec_Data
 /figs
 /__pycache__
-launch.json
+/.vscode
 
 plot_settings.py
 test*.py
