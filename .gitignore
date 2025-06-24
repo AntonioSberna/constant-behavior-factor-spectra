@@ -26,3 +26,7 @@ sandbox*.py
 *.xlsx
 *.xls
 *.csv
+*.doc
+*.docx
+*.ppt
+*.pptx
