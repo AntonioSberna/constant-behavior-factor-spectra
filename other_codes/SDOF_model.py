@@ -13,7 +13,7 @@ import pickle
 
 id_acc = 1
 T_1 = 0.5
-q = 1
+q = 1.2
 
 
 # unit of measurement: N, mm, sec
