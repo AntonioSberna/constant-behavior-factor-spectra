@@ -4,15 +4,13 @@
 
 
 import openseespy.opensees as ops
-# import opsvis as opsv
 import matplotlib.pyplot as plt
-# importare plot_settings.py per le impostazioni di plot se esiste nella cartella corrente
 try:
     import plot_settings as plt_set
 except ImportError:
     class plt_set:
         pass
-    plt_set.fig_size = (6, 4.5)
+    plt_set.fig_size = (6, 4.5) # default figure size if plot_settings is not available
 import numpy as np
 import pickle
 from tqdm import tqdm
