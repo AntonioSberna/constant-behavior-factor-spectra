@@ -9,19 +9,33 @@ import matplotlib.pyplot as plt
 import plot_settings as plt_set
 import numpy as np
 import pickle
+from tqdm import tqdm
+import openpyxl
+import os
 
 
 
-def os_analysis(id_acc, T_1, q, accs_data):
-    
+
+def os_analysis(id_acc, T_1, q, accs_data): 
+    """Run OpenSees analysis for a given acceleration record and period.
+    Args:
+        id_acc (int): ID of the acceleration record.
+        T_1 (float): Period for the analysis.
+        q (float): Behavior factor.
+        accs_data (dict): Dictionary containing acceleration data and spectral information (from load_acc_from_excel.py).
+    Returns:
+        float: Maximum displacement response for the given period and behavior factor.
+    """
+
+    global dy # da ripensare 
+
     # unit of measurement: N, mm, sec
-
     ops.wipe()
-    ops.model('basic', '-ndm', 2, '-ndf', 3)
+    ops.model('basic', '-ndm', 1, '-ndf', 1)
 
     # Nodes
-    ops.node(1, 0, 0), ops.fix(1, 1, 1, 1)
-    ops.node(11, 0, 0), ops.equalDOF(1, 11, 2, 3)
+    ops.node(1, 0), ops.fix(1, 1)
+    ops.node(11, 0)
 
 
     # Material
@@ -31,42 +45,17 @@ def os_analysis(id_acc, T_1, q, accs_data):
     k = 2193503.77  # Young's modulus [N/mm]
     dy=fy/k
     dp=dy*1.3
-    thetap= 60.2
+    # thetap= 60.2
     dpc= 183
     du=350
 
 
-    ops.uniaxialMaterial ('IMKPinching', 3, k, dp, dpc, du, fy, fmaxfy, fresfy, -dp, -dpc, -du, -fy, fmaxfy, fresfy, 400, 1000, 700, 400, 1, 1, 1, 1, 1, 1, 0.5, 0.5)
-    ops.uniaxialMaterial('MinMax', 2, 3, '-min', -2.5*du, '-max', 2.5*du) 
+    ops.uniaxialMaterial ('IMKPinching', 2, k, dp, dpc, du, fy, fmaxfy, fresfy, -dp, -dpc, -du, -fy, fmaxfy, fresfy, 400, 1000, 700, 400, 1, 1, 1, 1, 1, 1, 0.5, 0.5)
+    ops.uniaxialMaterial('MinMax', 1, 2, '-min', -2.5*du, '-max', 2.5*du) 
 
 
     # Element
-    ops.geomTransf('Linear', 1)
-    ops.element('zeroLength', 1, 1, 11, '-mat', 2, '-dir', 1)
-
-
-
-
-    # One step of static analysis
-    ops.timeSeries('Linear', 1 )
-    ops.pattern ('Plain', 1, 1)
-    ops.load(1, 0, 0, 0) 
-
-
-    ops.system ('BandGeneral')
-    ops.constraints ('Transformation')
-    ops.numberer ('RCM')
-    ops.test ('NormDispIncr', 1.0e-13,  1000, 3)
-    ops.algorithm ('Newton')
-    ops.integrator ('LoadControl', 1)
-    ops.analysis ('Static')
-
-    ops.analyze(1)
-    ops.loadConst('-time', 0)
-
-
-    ops.wipeAnalysis()
-
+    ops.element('zeroLength', 1, 1, 11, '-mat', 1, '-dir', 1)
 
 
 
@@ -75,28 +64,26 @@ def os_analysis(id_acc, T_1, q, accs_data):
     #
     g = 9806.65  # mm/s²
 
-    # Mass
+    # Massa
     Mnode = k*T_1**2/(4*np.pi**2)
     ops.mass(11, Mnode, 0, 0)
 
-    # # Modal analysis
+    # # Modal analysis (adesso è commentato perché non serve per il calcolo dello spettro)
     # eigenvalues = ops.eigen('-fullGenLapack',1)
     # periods = [(2*np.pi)/np.sqrt(lam) for lam in eigenvalues]
     # for i, freq in enumerate(periods):
     #     print(f"Modo {i+1}: frequenza = {freq:.4f} sec")
 
-
+    # Leggere i dati di accelerazione
     acc_data = np.array(accs_data["acc"][f'{id_acc}']) * g #converting acceleration to mm/s²
 
     # take position of accs_data["spectr"]["T"] equal to T_1
     T_index = accs_data["spectr"]["T"].index(T_1)
-
+    # Prendere pseudo accelerazione per T_1
     S_el = accs_data["spectr"][f'{id_acc}'][T_index]  # spectral acceleration for T_1
-
 
     # Scale factor for acceleration
     a_g = (k * dy * q) / (Mnode * S_el * g)
-    # print(a_g)
 
     # Damping
     xi = 5/100
@@ -108,102 +95,167 @@ def os_analysis(id_acc, T_1, q, accs_data):
     step_dt = 1
     DtAnalysis = dt/step_dt
     TMaxAnalysis = len(acc_data) * dt
-    n_steps = int(TMaxAnalysis/DtAnalysis)+1
     dof_analysis = 1
 
-
-    ops.test('EnergyIncr', 1e-8, 15, 0)
+    # Impostare parametri di analisi
+    ops.test('EnergyIncr', 1e-4, 20, 0)
     ops.constraints('Transformation')
     ops.numberer('RCM')
     ops.system("BandGen")
     ops.algorithm('Newton')
     ops.integrator('Newmark', 0.5, 0.25)
     ops.analysis('Transient')
-
     ops.timeSeries('Path', 2, '-dt', dt, '-values', *acc_data, '-factor', a_g)
     ops.pattern('UniformExcitation', 10, dof_analysis, '-accel', 2)
 
 
-
+    # Integrazione dell'equazione del moto
     tCurrent = ops.getTime()
-    time, D = [], []
-    ok, step = 0, 0
+    time, D, ok = [], [], 0
 
     while ok == 0 and tCurrent < TMaxAnalysis:
-
         ok = ops.analyze(1, DtAnalysis)
 
         if ok != 0:
-            ops.test('NormDispIncr', 1e-4,  100, 0)
+            ops.test('NormDispIncr', 1e-4, 100, 0)
             ops.algorithm('ModifiedNewton', '-initial')
             ok = ops.analyze(1, DtAnalysis)
             if ok == 0:
-                ops.test('EnergyIncr', 1e-8, 15, 0)
+                ops.test('EnergyIncr', 1e-4, 20, 0)
                 ops.algorithm('Newton')
-            else:
-                print(f"Analysis failed at step {step} with ok={ok}")
+            # else:
+            #     print(f"Analysis accel:{id_acc:i}, T:{T_1:.2f}, q:{q:.2f} failed!")
         
-        ops.reactions()
-
         tCurrent = ops.getTime()
         time.append(tCurrent)
 
         D.append(ops.nodeDisp(11, dof_analysis))
-        step += 1
-
-    # Maximum displacement
-    d_max = max(D, key=abs)
-
-    return abs(d_max)
+        
+    return abs(max(D, key=abs))
 
 
 def eval_spectrum(id_acc, q, accs_data, **kwargs):
-    Ts = kwargs.get('Ts', np.arange(0.10, 4, 0.05))
-    return [os_analysis(id_acc, round(T, 2), q, accs_data)/26.160000098837305 for T in Ts]
+    """Evaluate the displacement spectrum for a given acceleration record and scaling factor.
+    Args:
+        id_acc (int): ID of the acceleration record.
+        q (float): Behavior factor for the spectral displacement.
+        accs_data (dict): Dictionary containing acceleration data and spectral information (from load_acc_from_excel.py).
+        **kwargs: Additional keyword arguments, e.g., Ts for periods.
+    Returns:
+        list: List of spectral displacements for the given periods.
+    """
 
-if __name__ == "__main__":
+    Ts = kwargs.get('Ts', np.arange(0.10, 4, 0.05)) #  default periods if not provided
+    return [os_analysis(id_acc, round(T, 2), q, accs_data)/dy for T in Ts]
 
-    id_acc = 1
-    q = 1.25
 
-    # S_d = os_analysis(id_acc, T_1, q)
-    # print(f"Spectral displacement for id_acc={id_acc}, T_1={T_1}, q={q}: S_d = {S_d:.4f} g")
+def export_to_excel(S_ds, filename='displ_spectra_results.xlsx'):
+    """Export the spectral displacement results to an Excel file.
+    Args:
+        S_ds (dict): Dictionary containing spectral displacements for different behavior factors.
+        filename (str): Name of the output Excel file.
+    """
+    # Crea un nuovo file Excel
+    wb = openpyxl.Workbook()
+
+    # Per ogni accelerogramma (id_acc), crea un foglio
+    for id_acc in range(1, 8):
+        ws = wb.create_sheet(title=f"acc_{id_acc}")
+        # Prima colonna: T
+        ws.cell(row=1, column=1, value="T [s]")
+        for i, T in enumerate(Ts, start=2):
+            ws.cell(row=i, column=1, value=T)
+        # Colonne successive: q e valori S_ds
+        for col_idx, q in enumerate(qs, start=2):
+            ws.cell(row=1, column=col_idx, value=f"q = {q}")
+            for row_idx, val in enumerate(S_ds[q][id_acc-1], start=2):
+                ws.cell(row=row_idx, column=col_idx, value=val)
+
+    # Aggiungi un foglio per la media degli spettri
+    ws_avg = wb.create_sheet(title="avg_spectra")
+    # Prima colonna: T
+    ws_avg.cell(row=1, column=1, value="T [s]")
+    for i, T in enumerate(Ts, start=2):
+        ws_avg.cell(row=i, column=1, value=T)
+    # Colonne successive: q e valori medi
+    for col_idx, q in enumerate(qs, start=2):
+        ws_avg.cell(row=1, column=col_idx, value=f"q = {q}")
+        for row_idx, val in enumerate(S_ds[f"{q}_avg"], start=2):
+            ws_avg.cell(row=row_idx, column=col_idx, value=val)
+
+    # Rimuovi il foglio di default creato da openpyxl se non usato
+    if 'Sheet' in wb.sheetnames:
+        std = wb['Sheet']
+        wb.remove(std)
+
+    # Salva il file
+    wb.save(filename)
+    pass
+
+
+def plot_spectrum(fig, ax, S_ds, Ts, q):
+    """Plot the spectral displacement for a given scaling factor.
+    Args:
+        fig (Figure): Matplotlib figure object.
+        ax (Axes): Matplotlib axes object.
+        S_ds (dict): Dictionary containing spectral displacements.
+        Ts (list): List of periods.
+        q (float): Behavior factor for the spectral displacement.
+    """
+    for S_d in S_ds[q]: # plot di tutti gli spettri 
+        ax.plot(Ts, S_d, c="midnightblue", linewidth=0.5, alpha=0.4)
+    # Plot of the average
+    ax.plot(Ts, S_ds[f"{q}_avg"], c="midnightblue", linewidth=1.5, label="Avg spectr.")
+    ax.set_xlabel('T [s]'), ax.set_ylabel(r'$S_d/d_y$ [-]')
+    ax.grid(alpha = 0.3)
+    ax.axhline(q, color = "dimgrey", linestyle='--', linewidth=1.5, label=rf'$\mu$ = {q}')
+    ax.legend()
+    ax.set_xlim([0.1, 4]), ax.set_ylim([0, q*1.75])
+    return fig, ax
+
+
+
+if __name__ == "__main__": # main function starts here
+
+    # Crea la cartella figs se non esiste
+    os.makedirs('./figs', exist_ok=True)
 
     # read acceleration data from pickle file
     with open('acc_data.pkl', 'rb') as f:
         accs_data = pickle.load(f)
 
-    # S_ds = eval_spectrum(id_acc, q, accs_data)
-    Ts = np.arange(0.1, 2, 0.05)
+    # Range periodi su cui calcolare lo spettro
+    Ts = np.arange(0.1, 4, 0.05)
+    qs = np.arange(1, 5.25, 0.25)
 
-    S_ds = []
-    for id_acc in range(1, 6):
-        # print(id_acc)
-        S_ds.append(eval_spectrum(id_acc, q, accs_data, Ts=Ts))
+    S_ds = {}
+    for q in tqdm(qs): # per tutti i valori di q
 
+        # Calcolo dello spettro di spostamento per ogni accelerogramma
+        S_ds[q] = []
+        for id_acc in range(1, 8):
+            S_ds[q].append(eval_spectrum(id_acc, q, accs_data, Ts=Ts))
 
+        # Calcolo dello spettro medio
+        S_ds[f"{q}_avg"] = np.mean(S_ds[q], axis=0)
 
+    
+        ### Il codice finisce qui, il resto crea il plot e salva i risultati
 
-
-
-    fig = plt.figure(figsize=plt_set.fig_size)
-    ax = fig.gca()
-
-    for S_d in S_ds:
-        ax.plot(Ts, S_d, c="midnightblue", linewidth=0.5, alpha=0.4)
-    # Plot of the average
-    S_d_avg = np.mean(S_ds, axis=0)
-    ax.plot(Ts, S_d_avg, c="midnightblue", linewidth=1.5, label = "Avg spectr.")
-    # ax.plot(Ts,S_ds, label=f'id_acc={id_acc}, q={q}', c = "midnightblue")
-    # ax.scatter(Ts, S_ds, color='midnightblue', s=7)
-    ax.set_xlabel('T [s]'), ax.set_ylabel(r'$S_d/d_y$ [-]')
-    ax.grid(alpha = 0.3)
-    ax.axhline(q, color = "dimgrey", linestyle='--', linewidth=1.5, label=rf'$\mu$ = {q}')
-    ax.legend()
-    ax.set_xlim(0), ax.set_ylim(0)
-    ax.set_title(f'Displ. spectra q={q}')
-    plt.tight_layout(), plt.savefig(f'./figs/spectral_displacement_q_{q}_2.png', dpi=150, bbox_inches='tight')
+        ### Plot
+        fig = plt.figure(figsize=plt_set.fig_size)
+        ax = fig.gca()
+        fig, ax = plot_spectrum(fig, ax, S_ds, Ts, q)
+        ax.set_title(f'Displ. spectra q={q}')
+        plt.tight_layout(), plt.savefig(f'./figs/displ_spectr_q_{q}.png', dpi=250, bbox_inches='tight')
+        ax.set_xlim([0.1, 1.5]), ax.set_ylim([0, q*1.75])
+        ax.set_title(f'Displ. spectra q={q}, zoom fino a 1.5 s')
+        plt.tight_layout(), plt.savefig(f'./figs/displ_spectr_q_{q}_zoom.png', dpi=250, bbox_inches='tight')
 
 
+    # # Salvataggio del pickle (serve per il futuro)
+    # with open('displ_spectra_results.pkl', 'wb') as f:
+    #     pickle.dump(S_ds, f)
 
-
+    # Esportazione risultati su Excel
+    export_to_excel(S_ds, 'displ_spectra_results.xlsx')
