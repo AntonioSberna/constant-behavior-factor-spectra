@@ -2,13 +2,13 @@
 
 
 
-from openpyxl import load_workbook
+import openpyxl
 import pickle
 
 
 dati = {}
 
-ws = load_workbook('Acc_Rappresentativi_normalizzati.xlsx', data_only=True).active
+ws = openpyxl.load_workbook('Acc_Rappresentativi_normalizzati.xlsx', data_only=True).active
 n_colonne = ws.max_column
 dati['acc'] = {}
 for col_idx in range(1, n_colonne + 1):
@@ -19,7 +19,7 @@ for col_idx in range(1, n_colonne + 1):
     dati['acc'][f'{col_idx}'] = col_values
 
 
-ws = load_workbook('Sel_Rappresentativi_normalizzati.xlsx', data_only=True).active
+ws = openpyxl.load_workbook('Sel_Rappresentativi_normalizzati.xlsx', data_only=True).active
 n_colonne = ws.max_column
 dati['spectr'] = {}
 # first column as T

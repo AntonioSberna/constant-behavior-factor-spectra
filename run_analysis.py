@@ -218,8 +218,51 @@ def plot_spectrum(fig, ax, S_ds, Ts, q):
     return fig, ax
 
 
+def load_acc_from_excel(filename='acc_data.pkl'):
+    """Load acceleration data and spectral information from Excel files and save them to a pickle file.
+    This function reads two Excel files: 'Acc_Rappresentativi_normalizzati.xlsx' and 'Sel_Rappresentativi_normalizzati.xlsx',
+    extracts the relevant data, and saves it in a dictionary format to 'acc_data.pkl'.
+    """
+
+    dati = {}
+
+    ws = openpyxl.load_workbook('Acc_Rappresentativi_normalizzati.xlsx', data_only=True).active
+    n_colonne = ws.max_column
+    dati['acc'] = {}
+    for col_idx in range(1, n_colonne + 1):
+        col_values = []
+        for row in ws.iter_rows(min_row=3, min_col=col_idx, max_col=col_idx, values_only=True):
+            val = row[0]
+            col_values.append(val)
+        dati['acc'][f'{col_idx}'] = col_values
+
+
+    ws = openpyxl.load_workbook('Sel_Rappresentativi_normalizzati.xlsx', data_only=True).active
+    n_colonne = ws.max_column
+    dati['spectr'] = {}
+    # first column as T
+    col_values = []
+    for row in ws.iter_rows(min_row=3, min_col=1, max_col=1, values_only=True):
+        val = row[0]
+        col_values.append(val)
+    dati['spectr']["T"] = col_values
+
+
+    for col_idx in range(2, n_colonne + 1):
+        col_values = []
+        for row in ws.iter_rows(min_row=3, min_col=col_idx, max_col=col_idx, values_only=True):
+            val = row[0]
+            col_values.append(val)
+        dati['spectr'][f'{col_idx-1}'] = col_values
+
+    with open(filename, 'wb') as f:
+        pickle.dump(dati, f)
+    pass
 
 if __name__ == "__main__": # main function starts here
+
+    # Carica i dati di accelerazione da Excel se non esiste il file pickle
+    load_acc_from_excel() if not os.path.exists('acc_data.pkl') else None
 
     # Crea la cartella figs se non esiste
     os.makedirs('./figs', exist_ok=True)
