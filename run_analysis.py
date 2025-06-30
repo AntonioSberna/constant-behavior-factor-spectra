@@ -243,7 +243,7 @@ def load_acc_from_excel(filename='acc_data.pkl'):
     # first column as T
     col_values = []
     for row in ws.iter_rows(min_row=3, min_col=1, max_col=1, values_only=True):
-        val = row[0]
+        val = round(row[0], 2) # round to 2 decimal places
         col_values.append(val)
     dati['spectr']["T"] = col_values
 
