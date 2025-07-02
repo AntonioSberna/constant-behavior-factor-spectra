@@ -163,7 +163,7 @@ def export_to_excel(S_ds, filename='displ_spectra_results.xlsx'):
     wb = openpyxl.Workbook()
 
     # Per ogni accelerogramma (id_acc), crea un foglio
-    for id_acc in range(1, 8):
+    for id_acc in range(1, len(S_ds[f"{qs[0]}"])+1):
         ws = wb.create_sheet(title=f"acc_{id_acc}")
         # Prima colonna: T
         ws.cell(row=1, column=1, value="T [s]")
@@ -172,7 +172,7 @@ def export_to_excel(S_ds, filename='displ_spectra_results.xlsx'):
         # Colonne successive: q e valori S_ds
         for col_idx, q in enumerate(qs, start=2):
             ws.cell(row=1, column=col_idx, value=f"q = {q}")
-            for row_idx, val in enumerate(S_ds[q][id_acc-1], start=2):
+            for row_idx, val in enumerate(S_ds[f"{q}"][id_acc-1], start=2):
                 ws.cell(row=row_idx, column=col_idx, value=val)
 
     # Aggiungi un foglio per la media degli spettri
@@ -206,7 +206,7 @@ def plot_spectrum(fig, ax, S_ds, Ts, q):
         Ts (list): List of periods.
         q (float): Behavior factor for the spectral displacement.
     """
-    for S_d in S_ds[q]: # plot di tutti gli spettri 
+    for S_d in S_ds[f"{q}"]: # plot di tutti gli spettri
         ax.plot(Ts, S_d, c="midnightblue", linewidth=0.5, alpha=0.4)
     # Plot of the average
     ax.plot(Ts, S_ds[f"{q}_avg"], c="midnightblue", linewidth=1.5, label="Avg spectr.")
@@ -262,7 +262,7 @@ def load_acc_from_excel(filename='acc_data.pkl'):
 if __name__ == "__main__": # main function starts here
 
     n_gm = 7  # Numero di accelerogrammi
-    
+
     # Carica i dati di accelerazione da Excel se non esiste il file pickle
     load_acc_from_excel() if not os.path.exists('acc_data.pkl') else None
 
@@ -272,7 +272,7 @@ if __name__ == "__main__": # main function starts here
     # read acceleration data from pickle file
     with open('acc_data.pkl', 'rb') as f:
         accs_data = pickle.load(f)
-
+    
     # Range periodi su cui calcolare lo spettro
     Ts = np.arange(0.1, 4, 0.05)
     qs = np.arange(1, 5.25, 0.25)
@@ -281,15 +281,15 @@ if __name__ == "__main__": # main function starts here
     for q in tqdm(qs, desc = "Calcolo spettri di spostamento"): # per tutti i valori di q
 
         # Calcolo dello spettro di spostamento per ogni accelerogramma
-        S_ds[q] = []
-        for id_acc in tqdm(range(1, n_gm + 1), leave=False, desc="GM"):
-            S_ds[q].append(eval_spectrum(id_acc, q, accs_data, Ts=Ts))
+        S_ds[f"{q}"] = []
+        for id_acc in tqdm(range(1, len(accs_data["acc"]) + 1), leave=False, desc="GM"):
+            S_ds[f"{q}"].append(eval_spectrum(id_acc, q, accs_data, Ts=Ts))
 
         # Calcolo dello spettro medio
-        S_ds[f"{q}_avg"] = np.mean(S_ds[q], axis=0)
+        S_ds[f"{q}_avg"] = np.mean(S_ds[f"{q}"], axis=0)
 
     
-        ### Il codice finisce qui, il resto crea il plot e salva i risultati
+        ### Il codice finisce qui, il resto crea i plot e salva i risultati
 
         ### Plot
         fig = plt.figure(figsize=plt_set.fig_size)
@@ -302,7 +302,7 @@ if __name__ == "__main__": # main function starts here
         plt.tight_layout(), plt.savefig(f'./figs/displ_spectr_q_{q}_zoom.png', dpi=250, bbox_inches='tight')
 
 
-    # # Salvataggio del pickle (serve per il futuro)
+    # # Salvataggio del pickle (serve per futuri sviluppi)
     # with open('displ_spectra_results.pkl', 'wb') as f:
     #     pickle.dump(S_ds, f)
 
