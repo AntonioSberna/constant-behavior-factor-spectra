@@ -233,7 +233,7 @@ def load_acc_from_excel(filename='acc_data.pkl'):
         col_values = []
         for row in ws.iter_rows(min_row=3, min_col=col_idx, max_col=col_idx, values_only=True):
             val = row[0]
-            col_values.append(val)
+            col_values.append(val) if val is not None else None
         dati['acc'][f'{col_idx}'] = col_values
 
 
