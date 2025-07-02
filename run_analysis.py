@@ -227,9 +227,9 @@ def load_acc_from_excel(filename='acc_data.pkl'):
     dati = {}
 
     ws = openpyxl.load_workbook('Acc_Rappresentativi_normalizzati.xlsx', data_only=True).active
-    n_colonne = ws.max_column
+    n_col_acc = ws.max_column
     dati['acc'] = {}
-    for col_idx in range(1, n_colonne + 1):
+    for col_idx in range(1, n_col_acc + 1):
         col_values = []
         for row in ws.iter_rows(min_row=3, min_col=col_idx, max_col=col_idx, values_only=True):
             val = row[0]
@@ -238,7 +238,9 @@ def load_acc_from_excel(filename='acc_data.pkl'):
 
 
     ws = openpyxl.load_workbook('Sel_Rappresentativi_normalizzati.xlsx', data_only=True).active
-    n_colonne = ws.max_column
+    n_col_sel = ws.max_column
+    if n_col_sel != n_col_acc:
+        raise ValueError(f"Number of columns in the spectra file ({n_col_sel}) does not match the one in the file with accelerations ({n_col_acc}). Please che  ck the files.")
     dati['spectr'] = {}
     # first column as T
     col_values = []
@@ -248,7 +250,7 @@ def load_acc_from_excel(filename='acc_data.pkl'):
     dati['spectr']["T"] = col_values
 
 
-    for col_idx in range(2, n_colonne + 1):
+    for col_idx in range(2, n_col_sel + 1): #scarta la prima colonna dove troverà le T
         col_values = []
         for row in ws.iter_rows(min_row=3, min_col=col_idx, max_col=col_idx, values_only=True):
             val = row[0]
