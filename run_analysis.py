@@ -261,6 +261,8 @@ def load_acc_from_excel(filename='acc_data.pkl'):
 
 if __name__ == "__main__": # main function starts here
 
+    n_gm = 7  # Numero di accelerogrammi
+    
     # Carica i dati di accelerazione da Excel se non esiste il file pickle
     load_acc_from_excel() if not os.path.exists('acc_data.pkl') else None
 
@@ -276,11 +278,11 @@ if __name__ == "__main__": # main function starts here
     qs = np.arange(1, 5.25, 0.25)
 
     S_ds = {}
-    for q in tqdm(qs): # per tutti i valori di q
+    for q in tqdm(qs, desc = "Calcolo spettri di spostamento"): # per tutti i valori di q
 
         # Calcolo dello spettro di spostamento per ogni accelerogramma
         S_ds[q] = []
-        for id_acc in range(1, 8):
+        for id_acc in tqdm(range(1, n_gm + 1), leave=False, desc="GM"):
             S_ds[q].append(eval_spectrum(id_acc, q, accs_data, Ts=Ts))
 
         # Calcolo dello spettro medio
